@@ -109,44 +109,89 @@ public sealed class Analisador
         };
     }
 
+    /// <summary>
+    /// Um átomo, com <b>no máximo um</b> quantificador.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// "No máximo um" é a regra, e ela vale para o <c>*</c>, o <c>+</c>, o
+    /// <c>?</c> e o <c>{n,m}</c> igualmente: <c>a**</c>, <c>a+*</c> e
+    /// <c>a{2}{3}</c> são erro. O que não é erro é o <c>?</c> logo depois de um
+    /// quantificador, porque ali ele não é quantificador — é o marcador de
+    /// preguiça, e por isso é lido dentro de cada ramo e não fora.
+    /// </para>
+    /// <para>
+    /// A primeira versão aceitava tudo, com um laço no lugar do <c>if</c>, e um
+    /// comentário explicando que o .NET aceitava também. O comentário estava
+    /// errado — o .NET recusa <c>a**+</c> com "quantificador aninhado" — e foi
+    /// o juiz quem apontou. Aceitar o que o juiz recusa é tão errado quanto
+    /// recusar o que ele aceita, e é a metade que costuma passar despercebida.
+    /// </para>
+    /// </remarks>
     private No Repeticao()
     {
         var dentro = Atomo();
+        var onde = _posicao;
 
-        // O laço permite `a*?` e `a**`. O segundo é aceito pelo .NET como
-        // "repetição de repetição", e recusá-lo aqui daria uma divergência com
-        // o juiz onde não há nada de errado.
-        while (!Acabou)
+        if (Comer('*'))
         {
-            var onde = _posicao;
+            dentro = new No.Repeticao(dentro, Guloso: !Comer('?'));
+        }
+        else if (Comer('+'))
+        {
+            // `a+` é `a` seguido de `a*`. Desfazer o açúcar aqui mantém a
+            // máquina com uma instrução a menos.
+            var guloso = !Comer('?');
 
-            if (Comer('*'))
-            {
-                dentro = new No.Repeticao(dentro, Guloso: !Comer('?'));
-            }
-            else if (Comer('+'))
-            {
-                // `a+` é `a` seguido de `a*`. Desfazer o açúcar aqui mantém a
-                // máquina com uma instrução a menos.
-                var guloso = !Comer('?');
-
-                dentro = new No.Sequencia([dentro, new No.Repeticao(dentro, guloso)]);
-            }
-            else if (Comer('?'))
-            {
-                dentro = new No.Opcional(dentro, Guloso: !Comer('?'));
-            }
-            else if (Olhar('{') && TentarContagem(out var de, out var ate))
-            {
-                dentro = Contar(dentro, de, ate, onde);
-            }
-            else
-            {
-                break;
-            }
+            dentro = new No.Sequencia([dentro, new No.Repeticao(dentro, guloso)]);
+        }
+        else if (Comer('?'))
+        {
+            dentro = new No.Opcional(dentro, Guloso: !Comer('?'));
+        }
+        else if (Olhar('{') && TentarContagem(out var de, out var ate))
+        {
+            dentro = Contar(dentro, de, ate, onde);
+        }
+        else
+        {
+            return dentro;
         }
 
+        ExigirQueNaoVenhaOutro();
+
         return dentro;
+    }
+
+    private void ExigirQueNaoVenhaOutro()
+    {
+        if (Acabou)
+        {
+            return;
+        }
+
+        if (Atual is '*' or '+')
+        {
+            throw new ErroDeExpressao(
+                $"quantificador aninhado: '{Atual}' logo depois de outro", _posicao);
+        }
+
+        // Um `{` só é quantificador se vier um número atrás; `a*{x}` tem uma
+        // chave literal e é legítimo.
+        if (Olhar('{'))
+        {
+            var guardado = _posicao;
+
+            if (TentarContagem(out _, out _))
+            {
+                _posicao = guardado;
+
+                throw new ErroDeExpressao(
+                    "quantificador aninhado: '{' logo depois de outro", _posicao);
+            }
+
+            _posicao = guardado;
+        }
     }
 
     private No Atomo()
