@@ -1,0 +1,32 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ${{ matrix.so }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        so: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # O juiz e o System.Text.RegularExpressions da propria maquina, entao a
+      # matriz de tres sistemas testa contra tres builds diferentes dele.
+      - name: testes
+        run: dotnet test testes/Regex.Testes/Regex.Testes.csproj --nologo -v q
+
+      # O placar roda tambem, e ele compara as DUAS construcoes de laco. Se um
+      # dia a perdedora passar a ganhar, e aqui que aparece.
+      - name: o placar
+        run: dotnet run --project ferramentas/Placar/Placar.csproj -c Release --nologo -- 2000
