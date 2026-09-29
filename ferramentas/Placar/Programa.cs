@@ -25,7 +25,20 @@ public static class Programa
 {
     public static int Main(string[] argumentos)
     {
-        var quantas = argumentos.Length > 0 ? int.Parse(argumentos[0]) : 4_000;
+        // Le o primeiro argumento que for um numero, e ignora o resto. O
+        // `dotnet run` nem sempre entrega so o que vem depois do `--`, e um
+        // `int.Parse` cru derruba a ferramenta com SIGABRT no CI -- foi
+        // exatamente o que aconteceu.
+        var quantas = 4_000;
+
+        foreach (var argumento in argumentos)
+        {
+            if (int.TryParse(argumento, out var lido) && lido > 0)
+            {
+                quantas = lido;
+                break;
+            }
+        }
 
         Console.WriteLine($"{quantas} expressões sorteadas por corpus, três textos cada,");
         Console.WriteLine("contra o System.Text.RegularExpressions rodando de verdade.");
